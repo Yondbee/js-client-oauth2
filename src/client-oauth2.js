@@ -702,9 +702,9 @@ function PKCEFlow (client) {
 
 PKCEFlow.prototype._base64URLEncode = function(str) {
   return str.toString('base64')
-    /*.replace(/\+/g, '-')
+    .replace(/\+/g, '-')
     .replace(/\//g, '_')
-    .replace(/=/g, ''); */
+    .replace(/=/g, '');
 }
 
 /**
