@@ -2,6 +2,7 @@ var Buffer = require('safe-buffer').Buffer
 var Querystring = require('querystring')
 var Url = require('url')
 var defaultRequest = require('./request')
+var crypto = require('crypto')
 
 var btoa
 if (typeof Buffer === 'function') {
@@ -194,13 +195,17 @@ function toString (str) {
  * Merge request options from an options object.
  */
 function requestOptions (requestOptions, options) {
-  return {
+  let reqOption = {
     url: requestOptions.url,
     method: requestOptions.method,
     body: Object.assign({}, requestOptions.body, options.body),
     query: Object.assign({}, requestOptions.query, options.query),
     headers: Object.assign({}, requestOptions.headers, options.headers)
   }
+
+  console.log(reqOption)
+
+  return reqOption
 }
 
 /**
@@ -217,6 +222,7 @@ function ClientOAuth2 (options, request) {
   this.owner = new OwnerFlow(this)
   this.credentials = new CredentialsFlow(this)
   this.jwt = new JwtBearerFlow(this)
+  this.pkce = new PKCEFlow(this)
 }
 
 /**
@@ -296,6 +302,8 @@ function ClientOAuth2Token (client, data) {
   this.tokenType = data.token_type && data.token_type.toLowerCase()
   this.accessToken = data.access_token
   this.refreshToken = data.refresh_token
+  this.codeVerifier = data.codeVerifier || null
+  this.codeChallenge = data.codeChallenge || null
 
   this.expiresIn(Number(data.expires_in))
 }
@@ -678,5 +686,82 @@ JwtBearerFlow.prototype.getToken = function (token, opts) {
   }, options))
     .then(function (data) {
       return self.client.createToken(data)
+    })
+}
+
+
+/**
+ * Support PKCE grant.
+ *
+ * Reference: http://tools.ietf.org/html/rfc6749#section-4.4
+ *
+ */
+function PKCEFlow (client) {
+  this.client = client
+}
+
+PKCEFlow.prototype._base64URLEncode = function(str) {
+  return str.toString('base64')
+    /*.replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, ''); */
+}
+
+/**
+ * Generate a code verifier.
+ */
+PKCEFlow.prototype._getCodeVerifier = function()
+{
+  return this._base64URLEncode(crypto.randomBytes(64));
+}
+
+/**
+ * Generate a code validator.
+ */
+PKCEFlow.prototype._getCodeChallenge = function()
+{
+  this._codeVerifier = this._getCodeVerifier();
+  this._codeChallenge = crypto.createHash('sha256').update(this._codeVerifier).digest('base64');
+
+  return this._codeChallenge;
+}
+
+/**
+ * Request an access token using the client credentials.
+ *
+ * @param  {Object}  [opts]
+ * @return {Promise}
+ */
+PKCEFlow.prototype.getToken = function (opts) {
+  var self = this
+  var options = Object.assign({}, this.client.options, opts)
+
+  expects(options, 'clientId', 'clientSecret', 'accessTokenUri')
+
+  return this.client._request(requestOptions({
+    url: options.accessTokenUri,
+    method: 'POST',
+    headers: Object.assign({}, DEFAULT_HEADERS, {
+        Authorization: auth(options.clientId, options.clientSecret)
+    }),
+    body: {
+      scope: sanitizeScope(options.scopes),
+      client_id: options.clientId,
+      client_secret: options.clientSecret,
+      code_challenge: this._getCodeChallenge(),
+      code_challenge_method: 'S256',
+      grant_type: 'urn:druid:oauth2:grant-type:code_challenge'
+    }
+  }, options))
+    .then(function (data) {
+
+      // pass code verifier on to the token
+      if (data.access_token)
+      {
+        data.codeVerifier = self._codeVerifier;
+        data.codeChallenge = self._codeChallenge;
+      }
+
+      return self.client.createToken(data);
     })
 }

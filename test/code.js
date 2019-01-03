@@ -19,7 +19,7 @@ describe('code', function () {
   describe('#getUri', function () {
     it('should return a valid uri', function () {
       expect(githubAuth.code.getUri()).to.equal(
-        config.authorizationUri + '?client_id=abc&' +
+        config.authorizationUri + '?client_id=' + config.clientId + '&' +
         'redirect_uri=http%3A%2F%2Fexample.com%2Fauth%2Fcallback&' +
         'scope=notifications&response_type=code&state='
       )

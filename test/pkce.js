@@ -1,23 +1,22 @@
 /* global describe, it */
-var chai = require('chai')
-var expect = chai.expect
+var expect = require('chai').expect
 var config = require('./support/config')
 var ClientOAuth2 = require('../')
 
-chai.use(require('chai-string'));
-
-describe('credentials', function () {
+describe('pkce', function () {
   var githubAuth = new ClientOAuth2({
     clientId: config.clientId,
     clientSecret: config.clientSecret,
     accessTokenUri: config.accessTokenUri,
+    authorizationUri: config.authorizationUri,
     redirectUri: config.redirectUri,
-    authorizationGrants: ['credentials']
+    authorizationGrants: ['pkce'],
+    scopes: ['update', 'delete']
   })
 
   describe('#getToken', function () {
     it('should request the token', function () {
-      return githubAuth.credentials.getToken()
+      return githubAuth.pkce.getToken()
         .then(function (user) {
           expect(user).to.an.instanceOf(ClientOAuth2.Token)
           expect(user.accessToken).to.be.a('string').that.has.lengthOf.at.least(64)
@@ -27,21 +26,21 @@ describe('credentials', function () {
 
     describe('#sign', function () {
       it('should be able to sign a standard request object', function () {
-        return githubAuth.credentials.getToken()
+        return githubAuth.pkce.getToken()
           .then(function (token) {
             var obj = token.sign({
               method: 'GET',
               url: 'http://api.github.com/user'
             })
 
-            expect(obj.headers.Authorization).to.be.a('string').that.startsWith('Bearer ')
+            expect(obj.headers.Authorization).to.equal('Bearer ' + config.accessToken)
           })
       })
     })
 
     describe('#refresh', function () {
       it('should make a request to get a new access token', function () {
-        return githubAuth.credentials.getToken()
+        return githubAuth.pkce.getToken()
           .then(function (token) {
             return token.refresh()
           })
